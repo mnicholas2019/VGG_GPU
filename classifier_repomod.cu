@@ -30,17 +30,31 @@ void fill_classifier(VTYPE (&weights)[Nn][Ni], VTYPE (&data_in)[Ni],
  }
 }
 
-void classifier_layer(VTYPE (&synapse)[Nn][Ni], VTYPE (&neuron_i)[Ni], VTYPE (&neuron_n)[Nn]) {
- int total_calc=0;
- for (int n = 0; n < Nn; n++) {
-   VTYPE temp=0;
-   for (int i = 0; i < Ni; i++) {
-     temp += synapse[n][i] * neuron_i[i];
-   }
-   neuron_n[n] = transfer(temp);
- }
+__global__ void classifier_layer(VTYPE (&d_weights)[Nn][Ni], VTYPE (&d_data_in)[Ni], VTYPE (&d_data_out)[Nn]) {
+  int ROW = blockIdx.x*blockDim.x+threadIdx.x;
+  int COL = blockIdx.y*blockDim.y+threadIdx.y;
+
+  if(ROW < Ni && COL < Nn){
+    VTYPE tmp = 0
+    for (int i = 0; i < Nn; i++) {
+      tmp += d_data_in[i] * d_weights[i * Nn + COL]
+    }
+    data_out[COL] = transfer(tmp)
+  }
 }
 
+// original host version of classifier layers
+void classifier_layer_host(VTYPE (&weights)[Nn][Ni], VTYPE (&data_in)[Ni], VTYPE (&data_out)[Nn]) {
+  for (int n = 0; n < Nn; n++) {
+    VTYPE tmp=0;
+    for (int i = 0; i < Ni; i++) {
+      tmp += weights[n][i] * data_in[i];
+    }
+    data_out[n] = transfer(tmp);
+  }
+}
+
+// not yet converted to CUDA operation
 void classifier_layer_blocked(VTYPE (&synapse)[Nn][Ni], VTYPE (&neuron_i)[Ni],
                              VTYPE (&neuron_n)[Nn]) {
  int total_calc=0;
@@ -88,6 +102,7 @@ int main(int argc, char** argv) {
   VTYPE weights[Nn][Ni] __attribute__((aligned(64)));
   VTYPE data_in[Ni] __attribute__((aligned(64)));
   VTYPE data_out[Nn] __attribute__((aligned(64)));
+  VTYPE data_out_tmp[Nn] __attribute__((aligned(64)));
   VTYPE data_out_tiled[Nn] __attribute__((aligned(64)));
 
   // allocate arrays in device memory
@@ -101,7 +116,7 @@ int main(int argc, char** argv) {
 
   // fill arrays in host memory
   //fill_classifier(synapse,neuron_i,neuron_n,neuron_n2);
-  fill_classifier(weights,data_in,data_out,d_data_out_tiled)
+  fill_classifier(weights,data_in,data_out,d_data_out_tmp)
 
   // transfer data to device
   cudaMemcpy(d_data_in, data_in, cudaMemcpyHostToDevice)
@@ -110,30 +125,37 @@ int main(int argc, char** argv) {
   cudaMemcpy(d_data_out_tiled, data_out_tiled, cudaMemcpyHostToDevice)
 
   // need to define number of threads per block and number of blocks
-  int blockSize = 1
-  int numBlocks = 1
+  dim3 blocksPerGrid(1,1,1)
+  // threads per block cannot exceed 1024 total x1*x2*x3
+  dim3 threadsPerBlock(1,1,1)
 
   cout << "starting computation\n";
 
   begin_roi();
-  classifier_layer<<<numBlocks,blockSize>>>(d_weights,d_data_in,d_data_out);
+  classifier_layer<<<blocksPerGrid,threadsPerBlock>>>(d_weights,d_data_in,d_data_out);
   end_roi();
 
   // synchronize thread execuation and copy results back to host
   cudaDeviceSynchronize();
   cudaMemcpy(data_out, d_data_out, cudaMemcpyDeviceToHost)
 
+  // test to make sure our computations are correct
+  begin_roi();
+  classifier_layer_host(weights,data_in,data_out_tmp);
+  end_roi();
+  compare(data_out,data_out_tmp,Nn);
+
   cout << "simple version complete!\n";
 
-  begin_roi();
-  classifier_layer_blocked<<<numBlocks,blockSize>>>(d_weights,d_data_in,d_data_out_tiled);
-  end_roi();
+  //begin_roi();
+  //classifier_layer_blocked<<<numBlocks,blockSize>>>(d_weights,d_data_in,d_data_out_tiled);
+  //end_roi();
 
   // synchronize thread execuation and copy results back to host
-  cudaDeviceSynchronize();
-  cudaMemcpy(data_out_tiled, d_data_out_tiled, cudaMemcpyDeviceToHost)
+  //cudaDeviceSynchronize();
+  //cudaMemcpy(data_out_tiled, d_data_out_tiled, cudaMemcpyDeviceToHost)
 
-  cout << "blocked computation complete!\n";
+  //cout << "blocked computation complete!\n";
 
   compare(data_out,data_out_tiled,Nn);
 
