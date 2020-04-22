@@ -1,22 +1,3 @@
-# .PHONY: all
-# all: clean classifiers
-
-# classifiers: 
-# 	nvcc -I ../NVIDIA_CUDA-10.1_Samples/common/inc/ -o classifiers classifiers.cu
-
-# .Phony: run
-# run: clean classifiers
-# 	./classifiers
-
-# .Phony: prof
-# prof: run
-# 	nvprof ./classifiers
-
-# .Phony: clean
-# clean:
-# 	rm -f classifiers
-
-
 
 CFLAGS=$(OPT) --std=c++11 -g -O3
 MODULE  := class1
@@ -25,7 +6,6 @@ MODULE  := class1
 
 all: $(MODULE)
 
-HEADERS=dnn.hpp
 INCLUDES  = -I ../NVIDIA_CUDA-10.1_Samples/common/inc
 
 class1: classifiers.cu 
