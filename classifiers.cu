@@ -37,8 +37,8 @@ __global__ void classifier_layer(VTYPE (&d_weights)[Nn][Ni], VTYPE (&d_data_in)[
 
   if(ix * iy < Ni * Nn){
     VTYPE tmp = 0
-    for (int n = 0; n < Ni; n++) {
-      for (int m = 0; m < Nn; m++) {
+    for (int m = 0; m < Nn; m++) {
+      for (int n = 0; n < Ni; n++) {
         tmp += d_data_in[n] * d_weights[n][m]
       }
       data_out[n] = transfer(tmp)
