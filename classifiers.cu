@@ -60,8 +60,6 @@ __global__ void classifier_layer_gpu(VTYPE *d_weights, VTYPE *d_data_in, VTYPE *
       // }
 
     }
-    if (tmp < 0)
-      tmp = tmp/4;
     d_data_out[n] = tmp;
   }
 }
@@ -78,8 +76,22 @@ __global__ void classifier_layer_opt_gpu(VTYPE *d_weights, VTYPE *d_data_in, VTY
       int startidx = ix * Ni;
       tmp += d_weights[startidx + n] * d_data_in[n];
     }
-    if (tmp < 0)
-      tmp = tmp/4;
+    d_data_out[ix] = tmp;
+  }
+}
+
+__global__ void classifier_layer_batch_gpu(VTYPE *d_weights, VTYPE *d_data_in, VTYPE *d_data_out) {
+  // blockDim = threads in block
+  // 1 thread per output data
+  // printf("Kernel called from block %d, thread %d\n", blockIdx.x, threadIdx.x);
+  int ix = blockIdx.x * blockDim.x + threadIdx.x;
+
+  VTYPE tmp = 0;
+  if(ix < Nn){
+    for (int n = 0; n < Ni; n++) {
+      int startidx = ix * Ni;
+      tmp += d_weights[startidx + n] * d_data_in[n];
+    }
     d_data_out[ix] = tmp;
   }
 }
@@ -185,6 +197,18 @@ int main(int argc, char** argv) {
   cudaDeviceSynchronize();
   end_roi();
   cout << "Cuda Done 2\n";
+
+  cudaMemcpy(&data_out_gpu, d_data_out, outputSize, cudaMemcpyDeviceToHost);
+  compare(data_out, data_out_gpu, Nn);
+
+  blockSize = 256; // threads per block
+  numBlocks = (Nn + (blockSize - 1)) / blockSize; // number of blocks
+
+  begin_roi();
+  classifier_layer_batch_gpu<<<numBlocks,blockSize>>>(d_weights,d_data_in,d_data_out);
+  cudaDeviceSynchronize();
+  end_roi();
+  cout << "Cuda Done 3\n";
 
   cudaMemcpy(&data_out_gpu, d_data_out, outputSize, cudaMemcpyDeviceToHost);
   compare(data_out, data_out_gpu, Nn);
