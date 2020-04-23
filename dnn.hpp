@@ -29,7 +29,7 @@ __attribute__ ((noinline))  void end_roi()   {
 
 // Is this a leaky relu?
 VTYPE transfer(VTYPE i) {
-  return (i>0) ? i : i/4;
+  return i;
 }
 
 void compare(VTYPE* neuron1, VTYPE* neuron2, int size) {
