@@ -19,11 +19,8 @@ using namespace std;
   #define Tx  8
 #endif
 
-//#define NYPAD (Ny+Ky)
-//#define NXPAD (Nx+Kx)
 #define NYPAD (Ny+2)
 #define NXPAD (Nx+2)
-
 #define NYSCL (Ny/Sy)
 #define NXSCL (Nx/Sx)
 
@@ -53,9 +50,7 @@ void fill_convolution_shared_simple(VTYPE (&filters)[Ky][Kx][Nn][Ni],
   }  }  }
 }
 
-//std::pair<int,int> convolution_layer_blocked(
-void convolution_layer_blocked(
-                              VTYPE (&filters)[Ky][Kx][Nn][Ni],
+void convolution_layer_blocked(VTYPE (&filters)[Ky][Kx][Nn][Ni],
                               VTYPE (&data_in)[NYPAD][NXPAD][Ni],
                               VTYPE (&data_out)[NYSCL][NXSCL][Nn]) {
   //int c1=0,c2=0;
@@ -143,17 +138,16 @@ void convolution_layer(VTYPE (&filters)[Ky][Kx][Nn][Ni],
   }
 }
 
-__global__ void convolution_layer_gpu_1t1b(VTYPE *d_filters, VTYPE *d_data_in, VTYPE *d_data_out) {
-//__global__ void convolution_layer_gpu_1t1b(VTYPE (&d_filters)[Ky][Kx][Nn][Ni],
-//                               VTYPE (&d_data_in)[NYPAD][NXPAD][Ni],
-//                               VTYPE (&d_data_out)[NYSCL][NXSCL][Nn]) {
+__global__ void convolution_layer_gpu_1t1b(VTYPE (&synapse)[Ky][Kx][Nn][Ni],
+                                      VTYPE (&neuron_i)[NYPAD][NXPAD][Ni],
+                                      VTYPE (&neuron_n)[NYSCL][NXSCL][Nn]) {
   VTYPE sum[Nn]={0};
 
   // — Original code — (excluding nn, ii loops)
   int yout = 0;
   for (int y = 0; y < Ny; y += Sy) { // tiling for y;
     int xout = 0;
-    for (int x = 0; x < Nx; x += Sx) { // tiling for x;
+    for (int x = 0; x < Ny; x += Sx) { // tiling for x;
       for (int nn = 0; nn < Nn; nn += Tn) {
         for (int n = nn; n < nn + Tn; n++) {
           sum[n]=0;
@@ -164,16 +158,13 @@ __global__ void convolution_layer_gpu_1t1b(VTYPE *d_filters, VTYPE *d_data_in, V
           for (int kx = 0; kx < Kx; kx++)
             for (int n = nn; n < nn + Tn; n++)
               for (int i = 0; i < Ni; i++) {
-                //VTYPE sv = d_filters[ky][kx][n][i];
-                VTYPE sv = d_filters[ky + kx*Ny + n*Nx*Ny + i*Nn*Nx*Ny];
-                //VTYPE nv = d_data_in[ky + y][kx + x][i];
-                VTYPE nv = d_filters[(ky+y) + NYPAD*(kx+x) + NXPAD*NYPAD*i];
+                VTYPE sv = synapse[ky][kx][n][i];
+                VTYPE nv = neuron_i[ky + y][kx + x][i];
                 sum[n]+=sv*nv;
               }
         for (int n = nn; n < nn + Tn; n++) {
-          //d_data_out[yout][xout][n] = sum[n];
-          d_data_out[yout + xout*NYSCL + NYSCL*NXSCL*n] = sum[n];
-         }
+          neuron_n[yout][xout][n] = sum[n];
+        }
       }
       xout++;
     }
@@ -188,12 +179,6 @@ VTYPE  (*data_out_simple)[NYSCL][NXSCL][Nn];
 VTYPE (*data_out_block)[NYSCL][NXSCL][Nn];
 VTYPE (*data_out_gpu)[NYSCL][NXSCL][Nn];
 
-// VTYPE filters[Ky][Kx][Nn][Ni] __attribute__((aligned(64)));
-// VTYPE data_in[NYPAD][NXPAD][Ni] __attribute__((aligned(64)));
-// VTYPE data_out_simple[NYSCL][NXSCL][Nn] __attribute__((aligned(64)));
-// VTYPE data_out_block[NYSCL][NXSCL][Nn] __attribute__((aligned(64)));
-// VTYPE data_out_gpu[NYSCL][NXSCL][Nn] __attribute__((aligned(64)));
-
 int main(const int argc, const char** argv) {
   cout << "allocating memory\n";
   //allocate memory on host device
@@ -205,13 +190,11 @@ int main(const int argc, const char** argv) {
 
   // fill
   cout << "initializing arrays\n";
-  //fill_convolution_shared_simple(filters,data_in,data_out_simple,data_out_block,data_out_gpu);
   fill_convolution_shared_simple(*filters,*data_in,*data_out_simple,*data_out_block,*data_out_gpu);
 
   cout << "\nstarting simple computation\n";
   //Simple Version
   begin_roi();
-  //convolution_layer(filters,data_in,data_out_simple);
   convolution_layer(*filters,*data_in,*data_out_simple);
   end_roi();
   cout << "simple version complete!\n";
@@ -219,7 +202,6 @@ int main(const int argc, const char** argv) {
   cout << "\nstarting blocked computation\n";
   //Blocked Version
   begin_roi();
-  //convolution_layer_blocked(filters,data_in,data_out_block);
   convolution_layer_blocked(*filters,*data_in,*data_out_block);
   end_roi();
   cout << "blocked computation complete!\n";
@@ -227,46 +209,55 @@ int main(const int argc, const char** argv) {
   // compare simple and blocked results
   cout << "\nComparing blocked and simple results...\n";
   compare((VTYPE*)*data_out_simple,(VTYPE*)*data_out_block,NYSCL*NXSCL*Nn);
-  //compare_prime(data_out_simple,data_out_block);
   cout << "\n";
 
   // allocate arrays in device memory
   int inputSize = sizeof(VTYPE)*NXPAD*NYPAD*Ni;
   int outputSize = sizeof(VTYPE)*NXSCL*NYSCL*Nn;
   int filtersSize = sizeof(VTYPE)*Kx*Ky*Ni*Nn;
-  VTYPE *d_data_in, *d_filters, *d_data_out;
-  cudaMalloc(&d_data_in, inputSize);
-  cudaMalloc(&d_filters, filtersSize);
-  cudaMalloc(&d_data_out, outputSize);
+  //VTYPE *d_data_in, *d_filters, *d_data_out;
+  VTYPE (*d_filters)[Ky][Kx][Nn][Ni];
+  VTYPE  (*d_data_in)[NYPAD][NXPAD][Ni];
+  VTYPE  (*d_data_out)[NYSCL][NXSCL][Nn];
+
+  if ( cudaSuccess != cudaMalloc(&d_data_in, inputSize) )
+      printf( "Error!\n" );
+  if ( cudaSuccess != cudaMalloc(&d_filters, filtersSize) )
+      printf( "Error!\n" );
+  if ( cudaSuccess != cudaMalloc(&d_data_out, outputSize) )
+      printf( "Error!\n" );
 
   // transfer data to device
   cout << "cuda memcopy data in...\n";
-  cudaMemcpy(d_data_in, &data_in, inputSize, cudaMemcpyHostToDevice);
+  if ( cudaSuccess != cudaMemcpy(d_data_in, data_in, inputSize, cudaMemcpyHostToDevice) )
+      printf( "Error!\n" );
   cout << "cuda memcopy filters...\n";
-  cudaMemcpy(d_filters, &filters, filtersSize, cudaMemcpyHostToDevice);
+  if ( cudaSuccess != cudaMemcpy(d_filters, filters, filtersSize, cudaMemcpyHostToDevice) )
+      printf( "Error!\n" );
   cout << "cuda memcopy data out...\n";
-  cudaMemcpy(d_data_out, &data_out_gpu, outputSize, cudaMemcpyHostToDevice);
+  if ( cudaSuccess != cudaMemcpy(d_data_out, data_out_gpu, outputSize, cudaMemcpyHostToDevice) )
+      printf( "Error!\n" );
 
-  // 1 THREAD 1 BLOCK
-  int threadsPerBlock = 1; // threads per block
-  int numBlocks = 1; // number of blocks
-
+  // Run cuda conv kernel with 1 thread 1 block
   cout << "\nCuda classifier computation begin\n";
   begin_roi();
-  //convolution_layer_gpu_1t1b<<<numBlocks,threadsPerBlock>>>(d_filters,d_data_in,d_data_out);
-  //cudaDeviceSynchronize();
-  //cudaMemcpy(&data_out_gpu, d_data_out, outputSize, cudaMemcpyDeviceToHost);
+  convolution_layer_gpu_1t1b<<<1,1>>>(*d_filters,*d_data_in,*d_data_out);
+  cudaDeviceSynchronize();
   end_roi();
   cout << "Cuda classifier computation done\n";
 
-  cout << "\nComparing simple and conv (1 thread 1 block)results...\n";
-  //compare_prime(data_out_simple, data_out_gpu);
-  //compare((VTYPE*)*data_out_simple,(VTYPE*)*data_out_block,NYSCL*NXSCL*Nn);
+  cout << "\nDevice to host memcopy begin\n";
+  if ( cudaSuccess != cudaMemcpy(data_out_gpu, d_data_out, outputSize, cudaMemcpyDeviceToHost) )
+      printf( "Error!\n" );
+  end_roi();
+  cout << "Device to host memcopy end\n";
+
+  cout << "\nComparing simple and conv (1 thread 1 block) results...\n";
+  compare((VTYPE*)*data_out_simple,(VTYPE*)*data_out_gpu,NYSCL*NXSCL*Nn);
   cout << "\n";
 
+  // Run cuda conv kernel with multiple threads and blocks
 
-
-  // MULTIPLE THREADS AND BLOCKS
   //int threadsPerBlock = 256; // threads per block
   //int numBlocks = (Nn + (threadsPerBlock - 1)) / threadsPerBlock; // number of blocks
 
