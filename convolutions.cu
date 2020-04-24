@@ -53,11 +53,12 @@ void fill_convolution_shared_simple(VTYPE (&filters)[Ky][Kx][Nn][Ni],
   }  }  }
 }
 
-std::pair<int,int> convolution_layer_blocked(
+//std::pair<int,int> convolution_layer_blocked(
+void convolution_layer_blocked(
                               VTYPE (&filters)[Ky][Kx][Nn][Ni],
                               VTYPE (&data_in)[NYPAD][NXPAD][Ni],
                               VTYPE (&data_out)[NYSCL][NXSCL][Nn]) {
-  int c1=0,c2=0;
+  //int c1=0,c2=0;
   VTYPE sum[Nn]={0};
 
   for (int yy = 0; yy < Ny; yy += Ty) {
@@ -142,10 +143,10 @@ void convolution_layer(VTYPE (&filters)[Ky][Kx][Nn][Ni],
   }
 }
 
-//__global__ void convolution_layer_gpu_1t1b(VTYPE *d_filters, VTYPE *d_data_in, VTYPE *d_data_out) {
-__global__ void convolution_layer_gpu_1t1b(VTYPE (&d_filters)[Ky][Kx][Nn][Ni],
-                               VTYPE (&d_data_in)[NYPAD][NXPAD][Ni],
-                               VTYPE (&d_data_out)[NYSCL][NXSCL][Nn]) {
+__global__ void convolution_layer_gpu_1t1b(VTYPE *d_filters, VTYPE *d_data_in, VTYPE *d_data_out) {
+//__global__ void convolution_layer_gpu_1t1b(VTYPE (&d_filters)[Ky][Kx][Nn][Ni],
+//                               VTYPE (&d_data_in)[NYPAD][NXPAD][Ni],
+//                               VTYPE (&d_data_out)[NYSCL][NXSCL][Nn]) {
   VTYPE sum[Nn]={0};
 
   // — Original code — (excluding nn, ii loops)
@@ -168,7 +169,7 @@ __global__ void convolution_layer_gpu_1t1b(VTYPE (&d_filters)[Ky][Kx][Nn][Ni],
                 sum[n]+=sv*nv;
               }
         for (int n = nn; n < nn + Tn; n++) {
-          d_data_out[yout][xout][n] = transfer(sum[n]);
+          d_data_out[yout][xout][n] = sum[n];
         }
       }
       xout++;
@@ -178,48 +179,53 @@ __global__ void convolution_layer_gpu_1t1b(VTYPE (&d_filters)[Ky][Kx][Nn][Ni],
 }
 
 //duplicate - should be able to delete
-VTYPE (*filters)[Ky][Kx][Nn][Ni];
-VTYPE  (*data_in)[NYPAD][NXPAD][Ni];
-VTYPE  (*data_out_simple)[NYSCL][NXSCL][Nn];
-VTYPE (*data_out_block)[NYSCL][NXSCL][Nn];
-VTYPE (*data_out_gpu)[NYSCL][NXSCL][Nn];
+// VTYPE (*filters)[Ky][Kx][Nn][Ni];
+// VTYPE  (*data_in)[NYPAD][NXPAD][Ni];
+// VTYPE  (*data_out_simple)[NYSCL][NXSCL][Nn];
+// VTYPE (*data_out_block)[NYSCL][NXSCL][Nn];
+// VTYPE (*data_out_gpu)[NYSCL][NXSCL][Nn];
 
-VTYPE (*d_data_in)[NYPAD][NXPAD][Ni];
-VTYPE (*d_filters)[Ky][Kx][Nn][Ni];
-VTYPE (*d_data_out)[NYSCL][NXSCL][Nn];
+// VTYPE (*d_data_in)[NYPAD][NXPAD][Ni];
+// VTYPE (*d_filters)[Ky][Kx][Nn][Ni];
+// VTYPE (*d_data_out)[NYSCL][NXSCL][Nn];
+
+VTYPE filters[Ky][Kx][Nn][Ni] __attribute__((aligned(64)));
+VTYPE data_in[NYPAD][NXPAD][Ni] __attribute__((aligned(64)));
+VTYPE data_out_simple[NYSCL][NXSCL][Nn] __attribute__((aligned(64)));
+VTYPE data_out_block[NYSCL][NXSCL][Nn] __attribute__((aligned(64)));
+VTYPE data_out_gpu[NYSCL][NXSCL][Nn] __attribute__((aligned(64)));
 
 int main(const int argc, const char** argv) {
   cout << "allocating memory\n";
   // allocate memory on host device
-  filters   = (VTYPE (*)[Ky][Kx][Nn][Ni])  aligned_malloc(64,  SYNAPSE_SIZE*sizeof(VTYPE));
-  data_in  = (VTYPE (*)[NYPAD][NXPAD][Ni])aligned_malloc(64,NYPAD*NXPAD*Ni*sizeof(VTYPE));
-  data_out_simple  = (VTYPE (*)[NYSCL][NXSCL][Nn])aligned_malloc(64,NYSCL*NXSCL*Nn*sizeof(VTYPE));
-  data_out_block = (VTYPE (*)[NYSCL][NXSCL][Nn])aligned_malloc(64,NYSCL*NXSCL*Nn*sizeof(VTYPE));
-  data_out_gpu = (VTYPE (*)[NYSCL][NXSCL][Nn])aligned_malloc(64,NYSCL*NXSCL*Nn*sizeof(VTYPE));
-
-
-
+  // filters   = (VTYPE (*)[Ky][Kx][Nn][Ni])  aligned_malloc(64,  SYNAPSE_SIZE*sizeof(VTYPE));
+  // data_in  = (VTYPE (*)[NYPAD][NXPAD][Ni])aligned_malloc(64,NYPAD*NXPAD*Ni*sizeof(VTYPE));
+  // data_out_simple  = (VTYPE (*)[NYSCL][NXSCL][Nn])aligned_malloc(64,NYSCL*NXSCL*Nn*sizeof(VTYPE));
+  // data_out_block = (VTYPE (*)[NYSCL][NXSCL][Nn])aligned_malloc(64,NYSCL*NXSCL*Nn*sizeof(VTYPE));
+  // data_out_gpu = (VTYPE (*)[NYSCL][NXSCL][Nn])aligned_malloc(64,NYSCL*NXSCL*Nn*sizeof(VTYPE));
 
   // fill
   cout << "initializing arrays\n";
-  fill_convolution_shared_simple(*filters,*data_in,*data_out_simple,*data_out_block,*data_out_gpu);
+  fill_convolution_shared_simple(filters,data_in,data_out_simple,data_out_block,data_out_gpu);
 
-  cout << "starting simple computation\n";
+  cout << "\nstarting simple computation\n";
   //Simple Version
   begin_roi();
-  convolution_layer(*filters,*data_in,*data_out_simple);
+  convolution_layer(filters,data_in,data_out_simple);
   end_roi();
   cout << "simple version complete!\n";
 
-  //cout << "starting blocked computation\n";
+  cout << "\nstarting blocked computation\n";
   //Blocked Version
-  //begin_roi();
-  //convolution_layer_blocked(*filters,*data_in,*data_out_block);
-  //end_roi();
-  //cout << "blocked computation complete!\n";
+  begin_roi();
+  convolution_layer_blocked(filters,data_in,data_out_block);
+  end_roi();
+  cout << "blocked computation complete!\n";
 
   // compare simple and blocked results
-  //compare((VTYPE*)*data_out_simple,(VTYPE*)*data_out_block,NYSCL*NXSCL*Nn);
+  cout << "\nComparing blocked and simple results...\n";
+  compare_prime(data_out_simple,data_out_block);
+  cout << "\n";
 
   // allocate arrays in device memory
   int inputSize = sizeof(VTYPE)*NXPAD*NYPAD*Ni;
@@ -239,15 +245,18 @@ int main(const int argc, const char** argv) {
   int threadsPerBlock = 1; // threads per block
   int numBlocks = 1; // number of blocks
 
-  cout << "Cuda classifier computation begin\n";
+  cout << "\nCuda classifier computation begin\n";
   begin_roi();
-  convolution_layer_gpu_1t1b<<<numBlocks,threadsPerBlock>>>(*d_filters,*d_data_in,*d_data_out);
+  convolution_layer_gpu_1t1b<<<numBlocks,threadsPerBlock>>>(d_filters,d_data_in,d_data_out);
   cudaDeviceSynchronize();
   cudaMemcpy(&data_out_gpu, d_data_out, outputSize, cudaMemcpyDeviceToHost);
   end_roi();
   cout << "Cuda classifier computation done\n";
 
-  compare(data_out_simple, data_out_gpu, Nn);
+  cout << "\nComparing simple and conv (1 thread 1 block)results...\n";
+  compare_prime(data_out_simple, data_out_gpu);
+  cout << "\n";
+
 
 
   // MULTIPLE THREADS AND BLOCKS
@@ -269,4 +278,6 @@ int main(const int argc, const char** argv) {
   cudaFree(d_filters);
 
   cout << "done\n";
+
+  return 0;
 }
