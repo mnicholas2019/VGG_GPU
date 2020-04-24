@@ -50,8 +50,9 @@ void fill_classifier(VTYPE (&weights)[Nn][Ni], VTYPE (&data_in)[Ni],
 
 __global__ void classifier_layer_gpu(VTYPE *d_weights, VTYPE *d_data_in, VTYPE *d_data_out) {
 
+	VTYPE tmp;
   for (int n= 0; n < Nn; n++) {
-    VTYPE tmp = 0;
+  	tmp = 0;
     for (int i = 0; i < Ni; i++) {
       tmp += d_weights[n*Ni + i] * d_data_in[i];
       // if (n == Nn-1 && i < 10){
@@ -69,11 +70,10 @@ __global__ void classifier_layer_opt_gpu(VTYPE *d_weights, VTYPE *d_data_in, VTY
   // 1 thread per output data
   // printf("Kernel called from block %d, thread %d\n", blockIdx.x, threadIdx.x);
   int ix = blockIdx.x * blockDim.x + threadIdx.x;
-
+  int startidx = ix * Ni;
   VTYPE tmp = 0;
   if(ix < Nn){
     for (int n = 0; n < Ni; n++) {
-      int startidx = ix * Ni;
       tmp += d_weights[startidx + n] * d_data_in[n];
     }
     d_data_out[ix] = tmp;
