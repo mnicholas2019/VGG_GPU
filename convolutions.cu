@@ -29,7 +29,6 @@ using namespace std;
 #define SYNAPSE_SIZE (1L*Ky*Kx*Nn*Ni)
 
 VTYPE (*synapse)[Ky][Kx][Nn][Ni];
-
 VTYPE  (*neuron_i)[NYPAD][NXPAD][Ni];
 VTYPE  (*neuron_n)[NYSCL][NXSCL][Nn];
 VTYPE (*neuron_n2)[NYSCL][NXSCL][Nn];
