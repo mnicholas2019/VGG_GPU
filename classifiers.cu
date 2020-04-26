@@ -55,11 +55,6 @@ __global__ void classifier_layer_gpu(VTYPE *d_weights, VTYPE *d_data_in, VTYPE *
   	tmp = 0;
     for (int i = 0; i < Ni; i++) {
       tmp += d_weights[n*Ni + i] * d_data_in[i];
-      // if (n == Nn-1 && i < 10){
-      //   printf("multiplication, %d: %f\n", i, d_weights[i*n + i] * d_data_in[i]);
-      //   printf("weights: %f, %f\n", d_weights[i*n + i], d_data_in[i]);
-      // }
-
     }
     d_data_out[n] = tmp;
   }
@@ -145,8 +140,6 @@ int main(int argc, char** argv) {
   fill_classifier(weights,data_in,data_out,data_out_block);
   cout << "starting computation\n";
 
-  printf("weights: %f\n", weights[10][10]);
-
   begin_roi();
   classifier_layer_host(weights,data_in,data_out);
   end_roi();
@@ -202,22 +195,22 @@ int main(int argc, char** argv) {
   cudaMemcpy(&data_out_gpu, d_data_out, outputSize, cudaMemcpyDeviceToHost);
   compare(data_out, data_out_gpu, Nn);
 
-  int batchSize = 49152/sizeof(VTYPE);
-  printf("%Batch Size: %d\n", batchSize);
-  int maxBytes = 49152;
+  // int batchSize = 49152/sizeof(VTYPE);
+  // printf("%Batch Size: %d\n", batchSize);
+  // int maxBytes = 49152;
 
 
-  blockSize = 256; // threads per block
-  numBlocks = (Nn + (blockSize - 1)) / blockSize; // number of blocks
+  // blockSize = 256; // threads per block
+  // numBlocks = (Nn + (blockSize - 1)) / blockSize; // number of blocks
 
-  begin_roi();
-  classifier_layer_batch_gpu<<<numBlocks,blockSize>>>(d_weights,d_data_in,d_data_out);
-  cudaDeviceSynchronize();
-  end_roi();
-  cout << "Cuda Done 3\n";
+  // begin_roi();
+  // classifier_layer_batch_gpu<<<numBlocks,blockSize>>>(d_weights,d_data_in,d_data_out);
+  // cudaDeviceSynchronize();
+  // end_roi();
+  // cout << "Cuda Done 3\n";
 
-  cudaMemcpy(&data_out_gpu, d_data_out, outputSize, cudaMemcpyDeviceToHost);
-  compare(data_out, data_out_gpu, Nn);
+  // cudaMemcpy(&data_out_gpu, d_data_out, outputSize, cudaMemcpyDeviceToHost);
+  // compare(data_out, data_out_gpu, Nn);
 
   cudaFree(d_data_in);
   cudaFree(d_data_out);

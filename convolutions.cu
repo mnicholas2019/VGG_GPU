@@ -257,15 +257,15 @@ __global__ void convolution_layer_opt_gpu(VTYPE (&synapse)[Ky][Kx][Nn][Ni],
 
   float conv = 0;
   if (tid == 0) {
-    for (int i = 0; i < 64; i++){
+    for (int i = 0; i < blockSize; i++){
       //printf("y: %d, x: %d, nn: %d, Result: %f\n", nyscl, nxscl, nn, mult_adds[i]);
       //printf("thread: %d, block: %d\n", threadIdx.x, blockIdx.x);
       conv += mult_adds[i];
     }
     neuron_n[nyscl][nxscl][nn] = conv;
-    if (conv == 0){
-      printf("0 at : %d,%d,%d\n", nyscl, nxscl, nn);
-    }
+    // if (conv == 0){
+    //   printf("0 at : %d,%d,%d\n", nyscl, nxscl, nn);
+    // }
   }
 
 
@@ -303,8 +303,8 @@ int main(const int argc, const char** argv) {
   cout << "initializing arrays\n";
 
   fill_convolution_shared_simple(*synapse,*neuron_i);
-  printf("Synapse: %f\n", *synapse[0][0][0][0]);
-  printf("neuron_i: %f\n", *neuron_i[0][0][0]);
+  // printf("Synapse: %f\n", *synapse[0][0][0][0]);
+  // printf("neuron_i: %f\n", *neuron_i[0][0][0]);
 
   cout << "starting computation\n";
 
@@ -326,7 +326,7 @@ int main(const int argc, const char** argv) {
   cout << "Compare two host computations: ";
   compare((VTYPE*)*neuron_n,(VTYPE*)*neuron_n2,NYSCL*NXSCL*Nn);
 
-  printf("neuron n: %f, neuron n2: %f\n", *neuron_n[0][0][0], *neuron_n2[0][0][0]);
+  // printf("neuron n: %f, neuron n2: %f\n", *neuron_n[0][0][0], *neuron_n2[0][0][0]);
 
    // allocate arrays in device memory for cuda kernels
   int inputSize = sizeof(VTYPE)*NYPAD*NXPAD*Ni;
@@ -361,10 +361,10 @@ int main(const int argc, const char** argv) {
 	  // transfre back to host
 	  cudaMemcpy(neuron_n_gpu, d_neuron_n, outputSize, cudaMemcpyDeviceToHost);
     cout << "Compare cuda 1 to host: ";
-    //compare((VTYPE*)*neuron_n,(VTYPE*)*neuron_n_gpu,NYSCL*NXSCL*Nn);
-    for (int i = 0; i < 10; i++){
-      printf("Neuron_n: %f\n", *neuron_n_gpu[0][0][i]);
-    }
+    compare((VTYPE*)*neuron_n,(VTYPE*)*neuron_n_gpu,NYSCL*NXSCL*Nn);
+    // for (int i = 0; i < 10; i++){
+    //   printf("Neuron_n: %f\n", *neuron_n_gpu[0][0][i]);
+    // }
   }
   
   // second cuda kernel
@@ -387,7 +387,7 @@ int main(const int argc, const char** argv) {
     // transfre back to host
     //cudaMemcpy(test, d_test, testSize, cudaMemcpyDeviceToHost);
     cudaMemcpy(neuron_n_gpu, d_neuron_n, outputSize, cudaMemcpyDeviceToHost);
-    cout << "Compare cuda 2 to host: \n";
+    cout << "Compare cuda 2 to host: ";
     compare((VTYPE*)*neuron_n,(VTYPE*)*neuron_n_gpu,NYSCL*NXSCL*Nn);
 
     // printf("Neuron N memcopy: %f\n", *neuron_n_gpu[0][0][0]);
