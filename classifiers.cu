@@ -145,6 +145,8 @@ int main(int argc, char** argv) {
   fill_classifier(weights,data_in,data_out,data_out_block);
   cout << "starting computation\n";
 
+  printf("weights: %f\n", weights[10][10]);
+
   begin_roi();
   classifier_layer_host(weights,data_in,data_out);
   end_roi();

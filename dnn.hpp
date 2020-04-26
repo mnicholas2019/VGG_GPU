@@ -43,7 +43,7 @@ void compare(VTYPE* neuron1, VTYPE* neuron2, int size) {
   }
   if(error) {
     for(int i = 0; i < size; ++i) {
-      std::cout << i << " " << neuron1[i] << ":" << neuron2[i];;
+      std::cout << i << " " << neuron1[i] << ":" << neuron2[i];
 
       VTYPE diff = neuron1[i] - neuron2[i];
       if(diff>0.001f || diff <-0.001f) {
